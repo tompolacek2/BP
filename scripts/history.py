@@ -29,6 +29,3 @@ def show_trace_detail(trace):
     print(f"Vytvořeno: {getattr(trace, 'createdAt', '-')}")
     print("===\n")
 
-# Příklad použití (pro notebook nebo CLI):
-# show_user_history("27")
-# Pak lze zavolat show_trace_detail(traces[0])

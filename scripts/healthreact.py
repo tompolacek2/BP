@@ -2,15 +2,15 @@ import requests
 import json
 import csv
 from datetime import datetime, timedelta
-import re  # Import regex module
-import os  # Import os module for environment variables
+import re  
+import os 
 from scripts.langfuse import LangfuseConnector
 class HealthReact():
     """
     Class to handle fetching and processing health data from the HealthReact API.
     """
 
-    # Define available data types
+    # Definice dostupných typů dat
     DATA_TYPES = [
         "STEPS", "CALORIES", "DISTANCE", "ELEVATION",
         "MINUTES_FAIRLY_ACTIVE", "MINUTES_LIGHTLY_ACTIVE",
@@ -21,7 +21,7 @@ class HealthReact():
     # Define available aggregation methods
     AGGREGATIONS = ["RAW", "AVARAGE", "MAX", "MIN"]
 
-    # Regex to parse the dynamic option format TYPE_AGGREGATION_DAILY_XX
+    # Regex pro rozpoznání formátu datového typu
     OPTION_REGEX = re.compile(r"(\w+)_(" + "|".join(AGGREGATIONS) + r")_DAILY_(\d{2})$")
     TODAY_REGEX = re.compile(r"(\w+)_DAILY_TODAY$")
 
@@ -84,22 +84,16 @@ class HealthReact():
         available_options = []
         relevant_types = self.DATA_TYPES
         if applicant == "user":
-            # Filter DATA_TYPES based on what the user actually has, if provided
             if user_record_types:
                 relevant_types = [rt for rt in user_record_types if rt in self.DATA_TYPES]
             else:
-                # If user types are unknown, cautiously offer nothing specific for user?
-                # Or offer all possible? Let's offer all for now, validation happens later.
-                pass  # Keep relevant_types as all DATA_TYPES
+                pass  
 
         for data_type in relevant_types:
-            # Add dynamic XX options
             for agg in self.AGGREGATIONS:
                 available_options.append(f"{data_type}_{agg}_DAILY_XX")
-            # Add specific TODAY option
             available_options.append(f"{data_type}_DAILY_TODAY")
 
-        # If applicant is not user (e.g., default), provide all possible combinations
         if applicant != "user":
             all_options = []
             for data_type in self.DATA_TYPES:
@@ -119,9 +113,7 @@ class HealthReact():
         today = datetime.now()
         today_str = today.strftime("%Y-%m-%d")
 
-        # Try matching TYPE_AGGREGATION_DAILY_XX format
         match_xx = self.OPTION_REGEX.match(option)
-        # Try matching TYPE_DAILY_TODAY format
         match_today = self.TODAY_REGEX.match(option)
 
         if match_xx:
@@ -131,7 +123,7 @@ class HealthReact():
                 raise ValueError("Number of days (XX) must be positive.")
 
             from_date = (today - timedelta(days=days)).strftime("%Y-%m-%d")
-            to_date = today_str  # Fetch up to today
+            to_date = today_str 
 
             print(f"Fetching {data_type} data for {days} days ({from_date} to {to_date})")
             raw_data_csv = self.get_basic_data(data_type, from_date, to_date, user_id)
@@ -139,7 +131,6 @@ class HealthReact():
 
             if not data_list:
                 print("No data found for the period.")
-                # Return appropriate zero/empty value based on aggregation
                 if aggregation == "RAW":
                     return "[]"
                 else:
@@ -163,7 +154,6 @@ class HealthReact():
             print(f"Fetching {data_type} data for today ({today_str})")
             raw_data_csv = self.get_basic_data(data_type, today_str, today_str, user_id)
             data_list = self._parse_csv_data(raw_data_csv)
-            # DAILY_TODAY implies raw, summed data for the day
             return self.dense_basic_data_to_days(data_list)
 
         else:
@@ -174,7 +164,6 @@ class HealthReact():
         if not csv_text or not csv_text.strip():
             return []
         csv_lines = csv_text.strip().split('\n')
-        # Check if there's actual data beyond the header
         if len(csv_lines) <= 1:
             return []
         reader = csv.DictReader(csv_lines)
@@ -206,7 +195,6 @@ class HealthReact():
     def dense_basic_data_to_days(self, data: list) -> str:
         """ Aggregates data summing values per day. Returns JSON string like '["date": value, ...]'. """
         days = self._group_data_by_day(data)
-        # Format as JSON string representing a list of key-value pairs
         dict_to_string = json.dumps([{"date": d, "value": v} for d, v in days.items()])
         return dict_to_string
 
@@ -214,7 +202,7 @@ class HealthReact():
         """
         Získá poslední doporučení (traces) pro daného uživatele z Langfuse.
         """
-        # Inicializace LangfuseConnector s klíči (mohou být načteny z env nebo přímo)
+        # Inicializace LangfuseConnector s klíči
         langfuse = LangfuseConnector(
             public_api_key=os.environ.get("LANGFUSE_PUBLIC_KEY"),
             secret_api_key=os.environ.get("LANGFUSE_SECRET_KEY"),

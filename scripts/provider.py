@@ -1,4 +1,3 @@
-# Create default class for LLM and generate methods for LLM
 
 from langchain_groq import ChatGroq
 from langchain.chat_models import ChatOpenAI
