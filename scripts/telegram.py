@@ -2,7 +2,7 @@ import asyncio
 from telegram import Bot
 
 class TelegramConnector:
-    def __init__(self, token: str = "7875506886:AAFuzKroDUcKdZhazzPgqyG-IAWqzm7xhHE"):
+    def __init__(self, token: str = ""):
         self.token = token
 
     def send_message(self, chat_id: int, text: str):
