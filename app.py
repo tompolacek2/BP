@@ -12,7 +12,7 @@ import asyncio
 
 class PromptEditorApp:
     def __init__(self, root):
-        # Kontrola a případné vytvoření .env s placeholdry
+        # Kontrola a případné vytvoření .env souboru
         env_path = os.path.join(os.path.dirname(__file__), '.env')
         required_keys = [
             'GROQ_API_KEY',
@@ -32,7 +32,7 @@ class PromptEditorApp:
         self.root.title("Editor promptů")
         self.root.geometry("800x600")
         
-        # Langfuse connection
+        # Langfuse připojení
         self.langfuse = LangfuseConnector(
             public_api_key='pk-lf-1e3953fe-db0e-4cde-a7bc-9410fc82dedb',
             secret_api_key='sk-lf-acaf75c5-74af-4661-8660-825dd0e5ba92',
@@ -67,7 +67,7 @@ class PromptEditorApp:
         
         # HealthReact instance
         self.healthreact = HealthReact(api_key=os.environ.get('HR_API_KEY'))
-        # Compile regex patterns for validation once
+        # Regex pro možnosti datumu
         self.option_xx_regex = re.compile(r"^(\w+)_(" + "|".join(HealthReact.AGGREGATIONS) + r")_DAILY_(\d{2})$")
         self.today_regex = re.compile(r"^(\w+)_DAILY_TODAY$")
         self.generic_xx_regex_str = r"^(\w+)_(" + "|".join(HealthReact.AGGREGATIONS) + r")_DAILY_XX$"
@@ -75,17 +75,18 @@ class PromptEditorApp:
         self.available_data_options = []
         self.data_select_var = tk.StringVar()
         self.data_select = None
+
+        self.focused_text_widget = None
         
-        self.focused_text_widget = None  # Track currently focused text widget
-        
-        # Telegram connector
+        # Telegram konektor
         self.telegram_connector = TelegramConnector()
         self.telegram_chat_id = tk.StringVar(value="7304423973")
         self.last_llm_result = None
         
-        # Create UI
+        # Vytvoření UI
         self.create_widgets()
-
+    
+    # Získání všech dostupných modelů a providerů
     def _get_all_model_options(self):
         options = []
         for provider, cls in self.provider_classes.items():
@@ -93,12 +94,12 @@ class PromptEditorApp:
                 options.append(f"{provider}:{model}")
         return options
     
+    # Widgety pro UI
     def create_widgets(self):
-        # Top frame for prompt selection
         top_frame = ttk.Frame(self.root, padding="10")
         top_frame.pack(fill=tk.X)
 
-        # Namespace selection
+        
         ttk.Label(top_frame, text="Typ:").pack(side=tk.LEFT, padx=5)
         self.namespace_var = tk.StringVar(value="default")
         self.namespace_select = ttk.Combobox(top_frame, textvariable=self.namespace_var, 
@@ -118,15 +119,15 @@ class PromptEditorApp:
         self.prompt_name.pack(side=tk.LEFT, padx=5)
         self.prompt_name.config(state="disabled")
 
-        # Tlačítko Načíst prompt vždy na konci
+        # Tlačítko Načíst
         self.load_prompt_btn = ttk.Button(top_frame, text="Načíst prompt", command=self.load_prompt)
         self.load_prompt_btn.pack(side=tk.LEFT, padx=5)
         
-        # Middle frame for prompt editing
+        #  Tlačítko pro načtení promptu
         self.editor_frame = ttk.Frame(self.root, padding="10")
         self.editor_frame.pack(fill=tk.BOTH, expand=True)
         
-        # Scrollable frame
+        # Scrolovací obraz
         self.canvas = tk.Canvas(self.editor_frame)
         scrollbar = ttk.Scrollbar(self.editor_frame, orient="vertical", command=self.canvas.yview)
         self.scrollable_frame = ttk.Frame(self.canvas)
@@ -144,11 +145,9 @@ class PromptEditorApp:
         
         self.canvas.bind('<Configure>', self.on_canvas_configure)
         
-        # Bottom frame for save button a model select
         bottom_frame = ttk.Frame(self.root, padding="10")
         bottom_frame.pack(fill=tk.X)
         
-        # --- Model select ---
         ttk.Label(bottom_frame, text="Model:").pack(side=tk.LEFT, padx=5)
         self.model_var = tk.StringVar()
         self.model_select = ttk.Combobox(bottom_frame, textvariable=self.model_var, values=self.model_options, width=40, state="readonly")
@@ -162,7 +161,7 @@ class PromptEditorApp:
         self.test_prompt_btn.pack(side=tk.RIGHT, padx=5)
         ttk.Button(bottom_frame, text="Uložit změny", command=self.save_changes).pack(side=tk.RIGHT, padx=5)
         
-        # --- Tlačítko pro historii doporučení do samostatného frame pod ostatními tlačítky ---
+        # Tlačítko pro historii doporučení do samostatného frame pod ostatními tlačítky 
         self.history_frame = ttk.Frame(self.root, padding="0 0 10 10")
         self.history_button = ttk.Button(self.history_frame, text="Historie doporučení", command=self._show_history_for_selected_user)
         self.history_button.pack(side=tk.RIGHT, padx=5, pady=5)
@@ -187,7 +186,6 @@ class PromptEditorApp:
         if namespace == "user":
             self.prompt_name.pack_forget()
             self.user_select.pack(side=tk.LEFT, padx=5, before=self.load_prompt_btn)
-            # Zobraz okno s informací o stahování uživatelů
             progress_dialog = tk.Toplevel(self.root)
             progress_dialog.title("Stahuji uživatele")
             progress_dialog.geometry("300x100")
@@ -195,7 +193,6 @@ class PromptEditorApp:
             progress_dialog.grab_set()
             ttk.Label(progress_dialog, text="Stahuji uživatele...", padding=20).pack()
             progress_dialog.update()
-            # Načti uživatele
             users = self.healthreact.get_user_available_data_names()
             progress_dialog.destroy()
             if not users:
@@ -207,7 +204,6 @@ class PromptEditorApp:
             self.user_select['values'] = user_options
             self.user_id_map = {f"{u['id']} - {u['name']}": u['id'] for u in users}
             self.user_select_var.set(user_options[0])
-            # Nastav prompt_name na první id (pro interní logiku)
             self.prompt_name.delete(0, tk.END)
             self.prompt_name.insert(0, users[0]['id'])
         else:
@@ -218,7 +214,6 @@ class PromptEditorApp:
         self._update_test_prompt_button_state()
 
     def on_user_selected(self, event):
-        # Při výběru uživatele nastav prompt_name na jeho id (pro interní logiku)
         selected = self.user_select_var.get()
         user_id = self.user_id_map.get(selected, "")
         self.prompt_name.delete(0, tk.END)
@@ -239,16 +234,15 @@ class PromptEditorApp:
         try:
             namespace = self.namespace_var.get()
             if namespace == "default":
-                full_prompt_id = "default"  # Use "default" as the prompt ID for default namespace
-                self.prompt_name.config(state="normal")  # Temporarily enable to update text
+                full_prompt_id = "default"  
+                self.prompt_name.config(state="normal")  
                 self.prompt_name.delete(0, tk.END)
                 self.prompt_name.insert(0, "default")
-                self.prompt_name.config(state="disabled")  # Disable again
+                self.prompt_name.config(state="disabled")  
                 self.available_data_options = self.healthreact.get_available_data([], "default")
                 print("DATA DEFAULT", self.available_data_options)
             else:
                 if namespace == "user":
-                    # Zobraz okno s informací o načítání promptu
                     progress_dialog = tk.Toplevel(self.root)
                     progress_dialog.title("Načítám prompt")
                     progress_dialog.geometry("300x100")
@@ -258,7 +252,6 @@ class PromptEditorApp:
                     progress_dialog.update()
                     selected = self.user_select_var.get()
                     prompt_id = self.user_id_map.get(selected, "")
-                    # Získat recordTypes z mapy uživatelů (už jsou načtené)
                     user_record_types = []
                     for ulabel, uid in self.user_id_map.items():
                         if uid == prompt_id:
@@ -276,7 +269,6 @@ class PromptEditorApp:
                     messagebox.showerror("Chyba", "Zadejte název promptu")
                     return
                 
-                # Format the prompt identifier based on namespace
                 if namespace == "group":
                     full_prompt_id = f"group:{prompt_id}"
                     self.available_data_options = []
@@ -285,21 +277,17 @@ class PromptEditorApp:
                 else:
                     self.available_data_options = []
             
-            # Store the full prompt ID for later use when saving
             self.current_full_prompt_id = full_prompt_id
             
-            # Clear previous entries
             for widget in self.scrollable_frame.winfo_children():
                 widget.destroy()
             self.prompt_entries = []
-            self.focused_text_widget = None  # Reset focus tracking
+            self.focused_text_widget = None
             
-            # Get prompt from Langfuse
             self.prompt_data = self.langfuse.get_prompt(full_prompt_id)
             prompt_list = self.prompt_data.get_langchain_prompt()
             prompt_list = [list(t) for t in prompt_list]
-            
-            # Create editable fields for each prompt part
+
             for i, (role, content) in enumerate(prompt_list):
                 frame = ttk.LabelFrame(self.scrollable_frame, text=f"Part {i+1} - Role: {role}")
                 frame.pack(fill=tk.X, expand=True, pady=5, padx=5)
@@ -307,13 +295,11 @@ class PromptEditorApp:
                 text = tk.Text(frame, wrap=tk.WORD, height=10)
                 text.pack(fill=tk.BOTH, expand=True, pady=5, padx=5)
                 text.insert(tk.END, content)
-                
-                # Bind focus-in event to track focused widget
+
                 text.bind("<FocusIn>", self._on_text_focus)
                 
                 self.prompt_entries.append((role, text))
             
-            # Add selectbox for available data if any
             if self.available_data_options:
                 data_frame = ttk.LabelFrame(self.scrollable_frame, text="Dostupná data pro uživatele")
                 data_frame.pack(fill=tk.X, expand=True, pady=5, padx=5)
@@ -321,14 +307,12 @@ class PromptEditorApp:
                 self.data_select = ttk.Combobox(data_frame, textvariable=self.data_select_var, values=self.available_data_options, state="readonly")
                 self.data_select.pack(side=tk.LEFT, fill=tk.X, padx=5, pady=5, expand=True)
                 
-                # Add 'Vložit' button next to selectbox
                 insert_btn = ttk.Button(data_frame, text="Vložit", command=self.insert_selected_data)
                 insert_btn.pack(side=tk.LEFT, padx=5)
             
             if namespace == "user":
                 progress_dialog.destroy()
             
-            #messagebox.showinfo("Úspěch", f"Prompt načten: {full_prompt_id}")
         except Exception as e:
             messagebox.showerror("Chyba", f"Nepodařilo se načíst prompt: {str(e)}")
     
@@ -355,80 +339,61 @@ class PromptEditorApp:
         allowed_types = set(HealthReact.DATA_TYPES)
         allowed_aggregations = set(HealthReact.AGGREGATIONS)
 
-        # Determine the set of allowed variable patterns/strings for the current context
         current_allowed_patterns = set()
-        is_user_context = bool(self.available_data_options)  # True if user-specific options loaded
+        is_user_context = bool(self.available_data_options) 
 
         if is_user_context:
-            # User context: Build patterns from specific allowed options
             for opt in self.available_data_options:
                 if "_DAILY_XX" in opt:
-                    # Create a specific regex pattern for this allowed XX option
                     pattern_str = opt.replace("_DAILY_XX", "_DAILY_(\\d{2})")
                     current_allowed_patterns.add(re.compile(f"^{pattern_str}$"))
                 elif "_DAILY_TODAY" in opt:
-                    # Add the exact TODAY string
                     current_allowed_patterns.add(opt)
-                # Add the generic _XX string itself to check for unfilled variables later
                 if "_DAILY_XX" in opt:
                     current_allowed_patterns.add(opt)
 
         else:
-            # Default/Group context: Allow any valid combination based on general rules
             for data_type in allowed_types:
                 for agg in allowed_aggregations:
-                    # Add regex pattern for TYPE_AGG_DAILY_XX
                     current_allowed_patterns.add(re.compile(f"^{data_type}_{agg}_DAILY_(\\d{{2}})$"))
-                # Add exact string for TYPE_DAILY_TODAY
                 current_allowed_patterns.add(f"{data_type}_DAILY_TODAY")
 
-        # Validate variables in the prompt content
         for i, (role, content) in enumerate(updated_prompt):
             for var in self._extract_bracketed_vars(content):
                 is_valid = False
                 validation_error = None
 
-                # Check against allowed patterns/strings
                 for pattern in current_allowed_patterns:
                     if isinstance(pattern, str) and pattern == var:
-                        # Exact match (e.g., STEPS_DAILY_TODAY or generic STEPS_AVARAGE_DAILY_XX)
                         is_valid = True
-                        # If it's a generic XX variable in user context, it's an error (needs filling)
                         if is_user_context and "_DAILY_XX" in var:
                             is_valid = False
                             validation_error = f"Proměnná '{var}' obsahuje XX. Nahraďte XX dvouciferným číslem (01-99)."
                         break
-                    elif hasattr(pattern, 'match'):  # Check if it's a compiled regex
+                    elif hasattr(pattern, 'match'):
                         match = pattern.match(var)
                         if match:
-                            # Regex matched (specific XX or general XX pattern)
-                            # Check day count if captured
                             if len(match.groups()) > 0:
-                                days_str = match.groups()[-1]  # Assume day count is the last group
+                                days_str = match.groups()[-1]
                                 try:
                                     days = int(days_str)
                                     if 1 <= days <= 99:
                                         is_valid = True
-                                        break  # Valid XX variable found
+                                        break
                                     else:
-                                        # Invalid day count
                                         validation_error = f"Počet dní (XX) v '{var}' musí být mezi 01 a 99 (nalezeno: {days_str})."
                                         is_valid = False
                                         break
                                 except ValueError:
-                                    # Should not happen if regex is correct, but handle anyway
                                     validation_error = f"Neplatný formát čísla dní v '{var}'."
                                     is_valid = False
                                     break
                             else:
-                                # Regex matched but no day count (e.g., a pattern for TODAY?) - should be handled by string match
-                                is_valid = True  # Consider valid if pattern matches and no days expected
+                                is_valid = True
                                 break
 
                 if not is_valid:
-                    # If no pattern matched or validation failed, return error
                     final_error = validation_error or f"Proměnná '{var}' není povolena nebo má neplatný formát."
-                    # Add specific check for default/group context if format is wrong
                     if not is_user_context:
                         match_xx = self.option_xx_regex.match(var)
                         match_today = self.today_regex.match(var)
@@ -449,7 +414,7 @@ class PromptEditorApp:
 
                     return False, var, final_error
 
-        return True, None, None  # Validation passed
+        return True, None, None
 
     def save_changes(self):
         try:
@@ -457,19 +422,16 @@ class PromptEditorApp:
                 messagebox.showerror("Chyba", "Není načten žádný prompt k uložení")
                 return
             
-            # Get updated content from text fields
             updated_prompt = []
             for i, (role, text_widget) in enumerate(self.prompt_entries):
                 content = text_widget.get("1.0", tk.END).strip()
                 updated_prompt.append((role, content))
             
-            # Kontrola proměnných
             valid, unknown_var, error_reason = self._validate_prompt_vars(updated_prompt)
             if not valid:
                 messagebox.showerror("Chyba validace", f"Chyba v proměnné: {{{unknown_var}}}\n{error_reason}")
                 return
             
-            # Print debug information to console
             print("\n===== DEBUG INFO: PROMPT UPDATE =====")
             print(f"Prompt Identifier: {self.current_full_prompt_id}")
             print("\nPrompt Content:")
@@ -479,7 +441,6 @@ class PromptEditorApp:
                 print(f"Content: {content}")
                 print("-" * 40)
             
-            # Update the prompt using prompt identifier
             print("\nSending to update_prompt function...")
             response = self.langfuse.update_prompt(self.current_full_prompt_id, updated_prompt)
             print(f"Response from update_prompt: {response}")
@@ -497,24 +458,21 @@ class PromptEditorApp:
                 messagebox.showerror("Chyba", "Není načten žádný prompt k otestování")
                 return
 
-            # Get current content from text fields
             updated_prompt = []
             for i, (role, text_widget) in enumerate(self.prompt_entries):
                 content = text_widget.get("1.0", tk.END).strip()
                 updated_prompt.append((role, content))
 
-            # Kontrola proměnných before testing
             valid, unknown_var, error_reason = self._validate_prompt_vars(updated_prompt)
             if not valid:
                 messagebox.showerror("Chyba validace", f"Chyba v proměnné: {{{unknown_var}}}\n{error_reason}")
                 return
 
-            # --- OPRAVA: Správné získání user_id pro namespace 'user' ---
             namespace = self.namespace_var.get()
-            user_id = None  # Default to None
+            user_id = None 
             if namespace == "user":
                 selected = self.user_select_var.get()
-                user_id = self.user_id_map.get(selected)  # Get ID from map
+                user_id = self.user_id_map.get(selected)  
                 if not user_id:
                     messagebox.showerror("Chyba", "Nelze získat ID vybraného uživatele.")
                     return
@@ -525,34 +483,28 @@ class PromptEditorApp:
                 new_content = content
                 vars_in_content = self._extract_bracketed_vars(content)
                 for var in vars_in_content:
-                    # Only try to fetch data if it's a user context
                     if user_id is not None:
                         if var not in var_values:
                             try:
-                                # Use the updated get_data_for_option which handles XX
                                 value = self.healthreact.get_data_for_option(var, user_id)
-                            except ValueError as e:  # Catch specific format/day errors from healthreact
+                            except ValueError as e:
                                 messagebox.showerror("Chyba dat", f"Chyba při získávání dat pro '{var}': {e}")
-                                return  # Stop testing if data fetch fails validation
+                                return
                             except Exception as e:
                                 value = f"<chyba při načítání dat: {e}>"
                             var_values[var] = value
                         else:
                             value = var_values[var]
 
-                        # Substitute the variable in the content
-                        # Ensure value is string for replacement
                         str_value = str(value)
-                        # Escape curly braces within the value to prevent format errors downstream
+
                         escaped_value = str_value.replace('{', '{{').replace('}', '}}')
                         new_content = new_content.replace(f"{{{var}}}", escaped_value)
                     else:
-                        # For default/group prompts, leave variables unsubstituted for the test
                         pass
 
                 substituted_prompt.append((role, new_content))
 
-            # Show progress dialog
             progress_dialog = tk.Toplevel(self.root)
             progress_dialog.title("Testuji prompt")
             progress_dialog.geometry("300x100")
@@ -563,22 +515,17 @@ class PromptEditorApp:
             progress_dialog.update()
 
             try:
-                # Použij aktuálního providera
                 if namespace == "user" and user_id:
                     response = self.current_provider.generate(self.langfuse, substituted_prompt, user_id=f"user:{user_id}")
                 else:
                     response = self.current_provider.generate(self.langfuse, substituted_prompt)
 
-                # Close progress dialog
                 progress_dialog.destroy()
-
-                # Show result in a scrollable window
                 result_dialog = tk.Toplevel(self.root)
                 result_dialog.title("Výsledek testu promptu")
                 result_dialog.geometry("800x600")
                 result_dialog.transient(self.root)
 
-                # Vstup do LLM
                 input_text = scrolledtext.ScrolledText(result_dialog, wrap=tk.WORD, height=15)
                 input_text.pack(fill=tk.BOTH, expand=False, padx=10, pady=(10, 0))
                 input_text.insert(tk.END, "Vstup do LLM:\n")
@@ -663,11 +610,9 @@ class PromptEditorApp:
         tree.pack(fill=tk.BOTH, expand=True)
         for trace in traces:
             raw_date = getattr(trace, 'createdAt', '-')
-            # Format date if possible
             formatted_date = raw_date
             try:
                 if raw_date and raw_date != '-':
-                    # Try parsing ISO format
                     dt = datetime.datetime.fromisoformat(raw_date.replace('Z', '+00:00'))
                     formatted_date = dt.strftime('%-d. %-m. %Y, %H:%M')
             except Exception:
@@ -679,7 +624,6 @@ class PromptEditorApp:
                 return
             values = tree.item(selected, 'values')
             trace_id = values[2]
-            # Najdi trace podle ID
             trace = next((t for t in traces if getattr(t, 'id', None) == trace_id), None)
             if trace:
                 self.show_trace_detail(trace)
